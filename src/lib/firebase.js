@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
-import { getDatabase, ref, set, get, child, update, onValue, off, push, serverTimestamp, increment } from 'firebase/database'
-import { getAuth, signInWithCustomToken, signOut } from 'firebase/auth'
+import { getDatabase, ref, set, get, child, update, onValue, off, push, increment } from 'firebase/database'
+import { getAuth, signInAnonymously } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCfwz5irJzMy1UGzVhqb4rmqL4z-jeeJzA',
@@ -17,8 +17,6 @@ const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
 const auth = getAuth(app)
 
-const CLOUD_FUNCTIONS_URL = import.meta.env.VITE_CLOUD_FUNCTIONS_URL
-
 export {
   db,
   auth,
@@ -30,10 +28,7 @@ export {
   onValue,
   off,
   push,
-  serverTimestamp,
   increment,
-  signInWithCustomToken,
-  signOut,
-  CLOUD_FUNCTIONS_URL,
+  signInAnonymously,
 }
 export default app

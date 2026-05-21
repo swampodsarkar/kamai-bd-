@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { auth, db, ref, set, get, signInWithCustomToken } from '../../lib/firebase'
+import { auth, db, ref, get, signInAnonymously } from '../../lib/firebase'
 import Button from '../ui/Button'
 import { showToast } from '../ui/Toast'
+
+const ADMIN_KEY = 'kamai-admin-2026'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -10,33 +12,39 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
-    if (!adminKey.trim()) {
-      showToast('Enter admin key', 'warning')
-      return
-    }
+    if (!adminKey.trim()) { showToast('Enter admin key', 'warning'); return }
+    if (adminKey.trim() !== ADMIN_KEY) { showToast('Invalid admin key', 'error'); return }
 
     setLoading(true)
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_CLOUD_FUNCTIONS_URL}/adminAuth`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminKey: adminKey.trim() }),
-        }
-      )
+      const cred = await signInAnonymously(auth)
+      const adminRef = ref(db, `users/${cred.user.uid}`)
+      const snapshot = await get(adminRef)
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Invalid admin key')
+      if (!snapshot.exists()) {
+        await adminRef.set({
+          balance: 0,
+          adsWatched: 0,
+          referrals: 0,
+          referralEarnings: 0,
+          lastBonusClaim: 0,
+          lastAdTime: 0,
+          dailyLimit: 20,
+          createdAt: Date.now(),
+          firstName: 'Admin',
+          isAdmin: true,
+          isBanned: false,
+        })
+      } else if (!snapshot.val().isAdmin) {
+        showToast('Not authorized', 'error')
+        setLoading(false)
+        return
       }
 
-      await signInWithCustomToken(auth, data.token)
       showToast('Admin login successful', 'success')
       navigate('/admin')
     } catch (e) {
-      showToast(e.message || 'Login failed', 'error')
+      showToast('Login failed', 'error')
     } finally {
       setLoading(false)
     }
@@ -58,13 +66,11 @@ export default function AdminLogin() {
             value={adminKey}
             onChange={(e) => setAdminKey(e.target.value)}
             placeholder="Enter admin key"
-            className="w-full bg-dark-700 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-gold-500 transition-colors"
+            className="w-full bg-dark-700 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-gold-500"
             onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
           />
         </div>
-        <Button variant="gold" onClick={handleLogin} loading={loading}>
-          Login as Admin
-        </Button>
+        <Button variant="gold" onClick={handleLogin} loading={loading}>Login as Admin</Button>
       </div>
     </div>
   )

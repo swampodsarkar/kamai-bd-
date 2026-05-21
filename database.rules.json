@@ -2,10 +2,10 @@
   "rules": {
     "users": {
       ".read": "auth.uid !== null",
-      ".write": "false",
+      ".write": "auth.uid !== null",
       "$uid": {
         ".read": "auth.uid === $uid",
-        ".write": "auth.uid === $uid && newData.hasChildren(['balance', 'adsWatched', 'referrals', 'lastBonusClaim', 'createdAt']) && newData.child('balance').val() <= data.child('balance').val() + 0.01",
+        ".write": "auth.uid === $uid",
         "balance": {
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
@@ -15,17 +15,35 @@
         "referrals": {
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
+        "referralEarnings": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
         "lastBonusClaim": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() || !newData.exists()"
+        },
+        "lastAdTime": {
+          ".validate": "newData.isNumber() || !newData.exists()"
+        },
+        "dailyLimit": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
         },
         "createdAt": {
           ".validate": "newData.isNumber()"
         },
+        "telegramId": {
+          ".validate": "newData.isNumber() || !newData.exists()"
+        },
+        "username": {
+          ".validate": "newData.isString() || !newData.exists()"
+        },
+        "firstName": {
+          ".validate": "newData.isString() || !newData.exists()"
+        },
         "isBanned": {
-          ".validate": "newData.isBoolean()"
+          ".validate": "newData.isBoolean() || !newData.exists()"
         },
         "isAdmin": {
-          ".validate": "newData.isBoolean()"
+          ".validate": "newData.isBoolean() || !newData.exists()"
         },
         "$other": {
           ".validate": false
@@ -33,10 +51,10 @@
       }
     },
     "withdrawals": {
-      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      ".read": "auth.uid !== null",
       ".write": "auth.uid !== null",
       "$withdrawId": {
-        ".validate": "newData.hasChildren(['userId', 'amount', 'method', 'status', 'createdAt'])",
+        ".validate": "newData.hasChildren(['userId', 'amount', 'method', 'accountNumber', 'status', 'createdAt'])",
         "userId": {
           ".validate": "newData.val() === auth.uid"
         },
@@ -56,10 +74,13 @@
           ".validate": "newData.isNumber()"
         },
         "processedAt": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() || !newData.exists()"
         },
         "processedBy": {
-          ".validate": "newData.isString()"
+          ".validate": "newData.isString() || !newData.exists()"
+        },
+        "username": {
+          ".validate": "newData.isString() || !newData.exists()"
         },
         "$other": {
           ".validate": false
@@ -67,7 +88,7 @@
       }
     },
     "ad_logs": {
-      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      ".read": "auth.uid !== null",
       ".write": "auth.uid !== null",
       "$logId": {
         ".validate": "newData.hasChildren(['userId', 'timestamp', 'reward'])",
@@ -81,7 +102,7 @@
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
         "adType": {
-          ".validate": "newData.isString()"
+          ".validate": "newData.isString() || !newData.exists()"
         },
         "$other": {
           ".validate": false
@@ -102,14 +123,6 @@
           ".write": "auth.uid === $uid"
         }
       }
-    },
-    "ad_queue": {
-      ".read": false,
-      ".write": false
-    },
-    "analytics": {
-      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
-      ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true"
     }
   }
 }

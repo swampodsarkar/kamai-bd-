@@ -1,19 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
-import { CLOUD_FUNCTIONS_URL } from '../lib/firebase'
 import Button from './ui/Button'
 import { showToast } from './ui/Toast'
 
 const BONUS_AMOUNT = 0.25
-const STREAK_BONUSES = {
-  7: 2.00,
-  14: 5.00,
-  30: 15.00,
-}
+const STREAK_BONUSES = { 7: 2.00, 14: 5.00, 30: 15.00 }
 
 export default function DailyBonus() {
-  const { user, userData, updateUserData, isDemo } = useUser()
+  const { user, userData, updateUserData } = useUser()
   const navigate = useNavigate()
   const [claiming, setClaiming] = useState(false)
   const [streak, setStreak] = useState(0)
@@ -47,45 +42,24 @@ export default function DailyBonus() {
     }
   }, [user?.uid])
 
-  const claimBonusLocally = useCallback(async (newStreak) => {
-    const bonus = STREAK_BONUSES[newStreak] || BONUS_AMOUNT
-    updateUserData({
-      balance: (userData?.balance || 0) + bonus,
-      lastBonusClaim: Date.now(),
-    })
-    localStorage.setItem(`bonusStreak_${user?.uid}`, `${new Date().toDateString()}|${newStreak}`)
-    setStreak(newStreak)
-    return bonus
-  }, [userData, updateUserData, user?.uid])
-
   const handleClaim = async () => {
-    if (!canClaim() || claiming || !user?.uid) return
+    if (!canClaim() || claiming || !user?.uid || !userData) return
 
     setClaiming(true)
     try {
       const newStreak = streak + 1
+      const bonus = STREAK_BONUSES[newStreak] || BONUS_AMOUNT
 
-      if (isDemo) {
-        const bonus = await claimBonusLocally(newStreak)
-        showToast(`Daily bonus claimed! +${bonus.toFixed(2)} Tk`, 'success')
-        setClaiming(false)
-        return
-      }
-
-      const response = await fetch(`${CLOUD_FUNCTIONS_URL}/claimBonus`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, streak: newStreak }),
+      updateUserData({
+        balance: (userData.balance || 0) + bonus,
+        lastBonusClaim: Date.now(),
       })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Failed to claim bonus')
 
-      const bonusAmount = result.reward || BONUS_AMOUNT
       localStorage.setItem(`bonusStreak_${user?.uid}`, `${new Date().toDateString()}|${newStreak}`)
       setStreak(newStreak)
-      showToast(`Daily bonus claimed! +${bonusAmount.toFixed(2)} Tk`, 'success')
+      showToast(`Daily bonus claimed! +${bonus.toFixed(2)} Tk`, 'success')
     } catch (e) {
-      showToast(e.message || 'Failed to claim bonus', 'error')
+      showToast('Failed to claim bonus', 'error')
     } finally {
       setClaiming(false)
     }
@@ -123,7 +97,7 @@ export default function DailyBonus() {
           ))}
         </div>
         <p className="text-center text-xs text-gray-500">
-          {streak >= 7 ? `🎉 ${streak} day streak! Keep going!` : `${7 - streak} more days for 7-day streak bonus!`}
+          {streak >= 7 ? `🎉 ${streak} day streak!` : `${7 - streak} more days for 7-day bonus!`}
         </p>
       </div>
 

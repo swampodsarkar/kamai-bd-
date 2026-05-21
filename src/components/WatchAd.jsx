@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
-import { CLOUD_FUNCTIONS_URL } from '../lib/firebase'
+import { db, ref, set, push, get } from '../lib/firebase'
 import { showRewardedAd } from '../lib/adsgram'
 import Button from './ui/Button'
 import { showToast } from './ui/Toast'
 
-const AD_COOLDOWN = 45
 const REWARD = 0.05
+const COOLDOWN = 30 * 1000
 
 export default function WatchAd() {
-  const { user, userData, updateUserData, isDemo } = useUser()
+  const { user, userData, updateUserData } = useUser()
   const navigate = useNavigate()
   const [cooldown, setCooldown] = useState(0)
   const [isWatching, setIsWatching] = useState(false)
@@ -52,28 +52,20 @@ export default function WatchAd() {
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
   }, [cooldown, user?.uid])
 
-  const processReward = useCallback(async () => {
-    if (isDemo) {
-      const reward = REWARD
-      updateUserData({
-        balance: (userData?.balance || 0) + reward,
-        adsWatched: (userData?.adsWatched || 0) + 1,
-      })
-      return reward
+  const handleWatchAd = useCallback(async () => {
+    if (isWatching || cooldown > 0 || !user?.uid || !userData) return
+
+    const now = Date.now()
+    const lastAdTime = userData.lastAdTime || 0
+    if (now - lastAdTime < COOLDOWN) {
+      showToast('Wait before next ad!', 'warning')
+      return
     }
 
-    const response = await fetch(`${CLOUD_FUNCTIONS_URL}/rewardAd`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.uid, adType: 'rewarded' }),
-    })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error || 'Failed to process reward')
-    return data.reward || REWARD
-  }, [isDemo, user?.uid, userData, updateUserData])
-
-  const handleWatchAd = useCallback(async () => {
-    if (isWatching || cooldown > 0 || !user?.uid) return
+    if ((userData.adsWatched || 0) >= (userData.dailyLimit || 20)) {
+      showToast('Daily limit reached!', 'warning')
+      return
+    }
 
     setIsWatching(true)
     setLastReward(null)
@@ -87,25 +79,40 @@ export default function WatchAd() {
         return
       }
 
-      const rewardAmount = await processReward()
-      setLastReward(rewardAmount)
+      const newBalance = (userData.balance || 0) + REWARD
+      const newAdsWatched = (userData.adsWatched || 0) + 1
 
-      const cooldownEnd = Date.now() + AD_COOLDOWN * 1000
+      updateUserData({
+        balance: newBalance,
+        adsWatched: newAdsWatched,
+        lastAdTime: now,
+      })
+
+      const logRef = push(ref(db, 'ad_logs'))
+      await set(logRef, {
+        userId: user.uid,
+        timestamp: now,
+        reward: REWARD,
+        adType: 'rewarded',
+      })
+
+      const cooldownEnd = Date.now() + COOLDOWN
       localStorage.setItem(`adCooldown_${user.uid}`, String(cooldownEnd))
-      setCooldown(AD_COOLDOWN)
+      setCooldown(Math.ceil(COOLDOWN / 1000))
 
       const today = new Date().toDateString()
       const newCount = adsWatchedToday + 1
       localStorage.setItem(`adsToday_${user.uid}`, `${today}|${newCount}`)
       setAdsWatchedToday(newCount)
 
-      showToast(`Earned ${rewardAmount.toFixed(2)} Tk!`, 'success')
+      setLastReward(REWARD)
+      showToast(`Earned ${REWARD.toFixed(2)} Tk!`, 'success')
     } catch (e) {
-      showToast(e.message || 'Failed to watch ad. Try again.', 'error')
+      showToast(e.message || 'Failed to watch ad.', 'error')
     } finally {
       setIsWatching(false)
     }
-  }, [isWatching, cooldown, user?.uid, processReward, adsWatchedToday])
+  }, [isWatching, cooldown, user?.uid, userData, updateUserData, adsWatchedToday])
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60)
@@ -131,7 +138,7 @@ export default function WatchAd() {
       <div className="glass-card rounded-2xl p-6">
         <div className="flex justify-between items-center mb-4">
           <span className="text-gray-400 text-sm">Today's Ads</span>
-          <span className="text-white font-semibold">{adsWatchedToday}</span>
+          <span className="text-white font-semibold">{adsWatchedToday} / {userData?.dailyLimit || 20}</span>
         </div>
         <div className="flex justify-between items-center mb-4">
           <span className="text-gray-400 text-sm">Total Ads</span>
