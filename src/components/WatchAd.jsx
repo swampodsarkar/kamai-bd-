@@ -7,9 +7,10 @@ import Button from './ui/Button'
 import { showToast } from './ui/Toast'
 
 const AD_COOLDOWN = 45
+const REWARD = 0.05
 
 export default function WatchAd() {
-  const { user, userData, refreshUserData } = useUser()
+  const { user, userData, updateUserData, isDemo } = useUser()
   const navigate = useNavigate()
   const [cooldown, setCooldown] = useState(0)
   const [isWatching, setIsWatching] = useState(false)
@@ -21,25 +22,18 @@ export default function WatchAd() {
     const saved = localStorage.getItem(`adCooldown_${user?.uid}`)
     if (saved) {
       const remaining = Math.ceil((parseInt(saved) - Date.now()) / 1000)
-      if (remaining > 0) {
-        setCooldown(remaining)
-      } else {
-        localStorage.removeItem(`adCooldown_${user?.uid}`)
-      }
+      if (remaining > 0) setCooldown(remaining)
+      else localStorage.removeItem(`adCooldown_${user?.uid}`)
     }
 
     const today = new Date().toDateString()
     const adsToday = localStorage.getItem(`adsToday_${user?.uid}`)
     if (adsToday) {
       const [date, count] = adsToday.split('|')
-      if (date === today) {
-        setAdsWatchedToday(parseInt(count))
-      }
+      if (date === today) setAdsWatchedToday(parseInt(count))
     }
 
-    return () => {
-      if (cooldownRef.current) clearInterval(cooldownRef.current)
-    }
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
   }, [user?.uid])
 
   useEffect(() => {
@@ -55,10 +49,28 @@ export default function WatchAd() {
         })
       }, 1000)
     }
-    return () => {
-      if (cooldownRef.current) clearInterval(cooldownRef.current)
-    }
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
   }, [cooldown, user?.uid])
+
+  const processReward = useCallback(async () => {
+    if (isDemo) {
+      const reward = REWARD
+      updateUserData({
+        balance: (userData?.balance || 0) + reward,
+        adsWatched: (userData?.adsWatched || 0) + 1,
+      })
+      return reward
+    }
+
+    const response = await fetch(`${CLOUD_FUNCTIONS_URL}/rewardAd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid, adType: 'rewarded' }),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to process reward')
+    return data.reward || REWARD
+  }, [isDemo, user?.uid, userData, updateUserData])
 
   const handleWatchAd = useCallback(async () => {
     if (isWatching || cooldown > 0 || !user?.uid) return
@@ -70,29 +82,12 @@ export default function WatchAd() {
       const result = await showRewardedAd()
 
       if (!result.done) {
-        if (!result.demo) {
-          showToast('Watch the full ad to earn reward', 'warning')
-        }
+        if (!result.demo) showToast('Watch the full ad to earn reward', 'warning')
         setIsWatching(false)
         return
       }
 
-      const response = await fetch(`${CLOUD_FUNCTIONS_URL}/rewardAd`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          adType: 'rewarded',
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process reward')
-      }
-
-      const rewardAmount = data.reward || 0.05
+      const rewardAmount = await processReward()
       setLastReward(rewardAmount)
 
       const cooldownEnd = Date.now() + AD_COOLDOWN * 1000
@@ -104,15 +99,13 @@ export default function WatchAd() {
       localStorage.setItem(`adsToday_${user.uid}`, `${today}|${newCount}`)
       setAdsWatchedToday(newCount)
 
-      await refreshUserData()
-
       showToast(`Earned ${rewardAmount.toFixed(2)} Tk!`, 'success')
     } catch (e) {
       showToast(e.message || 'Failed to watch ad. Try again.', 'error')
     } finally {
       setIsWatching(false)
     }
-  }, [isWatching, cooldown, user?.uid, refreshUserData, adsWatchedToday])
+  }, [isWatching, cooldown, user?.uid, processReward, adsWatchedToday])
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60)
@@ -130,7 +123,7 @@ export default function WatchAd() {
       <div className="glass-card rounded-2xl p-6 gold-border text-center">
         <div className="text-6xl mb-4">📺</div>
         <p className="text-3xl font-bold gold-gradient-text">
-          {lastReward ? `${lastReward.toFixed(2)} Tk` : '0.05 Tk'}
+          {lastReward ? `${lastReward.toFixed(2)} Tk` : `${REWARD.toFixed(2)} Tk`}
         </p>
         <p className="text-gray-500 text-sm mt-1">per ad watched</p>
       </div>

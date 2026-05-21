@@ -13,7 +13,7 @@ const STREAK_BONUSES = {
 }
 
 export default function DailyBonus() {
-  const { user, userData, refreshUserData } = useUser()
+  const { user, userData, updateUserData, isDemo } = useUser()
   const navigate = useNavigate()
   const [claiming, setClaiming] = useState(false)
   const [streak, setStreak] = useState(0)
@@ -21,73 +21,68 @@ export default function DailyBonus() {
 
   const canClaim = useCallback(() => {
     if (!userData?.lastBonusClaim) return true
-    const now = Date.now()
-    return now - userData.lastBonusClaim >= 24 * 60 * 60 * 1000
+    return Date.now() - userData.lastBonusClaim >= 24 * 60 * 60 * 1000
   }, [userData])
 
   useEffect(() => {
-    if (!userData?.lastBonusClaim) {
-      setTimeLeft('Claim now!')
-      return
-    }
-
-    const updateTimeLeft = () => {
-      const now = Date.now()
-      const diff = 24 * 60 * 60 * 1000 - (now - userData.lastBonusClaim)
-      if (diff <= 0) {
-        setTimeLeft('Claim now!')
-        return
-      }
+    if (!userData?.lastBonusClaim) { setTimeLeft('Claim now!'); return }
+    const update = () => {
+      const diff = 24 * 60 * 60 * 1000 - (Date.now() - userData.lastBonusClaim)
+      if (diff <= 0) { setTimeLeft('Claim now!'); return }
       const h = Math.floor(diff / (60 * 60 * 1000))
       const m = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000))
       const s = Math.floor((diff % (60 * 1000)) / 1000)
       setTimeLeft(`${h}h ${m}m ${s}s`)
     }
-
-    updateTimeLeft()
-    const interval = setInterval(updateTimeLeft, 1000)
+    update()
+    const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
   }, [userData?.lastBonusClaim])
 
   useEffect(() => {
-    const savedStreak = localStorage.getItem(`bonusStreak_${user?.uid}`)
-    if (savedStreak) {
-      const [date, count] = savedStreak.split('|')
-      const today = new Date().toDateString()
-      if (date === today || new Date(date).getTime() > Date.now() - 48 * 60 * 60 * 1000) {
-        setStreak(parseInt(count))
-      }
+    const saved = localStorage.getItem(`bonusStreak_${user?.uid}`)
+    if (saved) {
+      const [date, count] = saved.split('|')
+      if (new Date(date).getTime() > Date.now() - 48 * 60 * 60 * 1000) setStreak(parseInt(count))
     }
   }, [user?.uid])
+
+  const claimBonusLocally = useCallback(async (newStreak) => {
+    const bonus = STREAK_BONUSES[newStreak] || BONUS_AMOUNT
+    updateUserData({
+      balance: (userData?.balance || 0) + bonus,
+      lastBonusClaim: Date.now(),
+    })
+    localStorage.setItem(`bonusStreak_${user?.uid}`, `${new Date().toDateString()}|${newStreak}`)
+    setStreak(newStreak)
+    return bonus
+  }, [userData, updateUserData, user?.uid])
 
   const handleClaim = async () => {
     if (!canClaim() || claiming || !user?.uid) return
 
     setClaiming(true)
     try {
+      const newStreak = streak + 1
+
+      if (isDemo) {
+        const bonus = await claimBonusLocally(newStreak)
+        showToast(`Daily bonus claimed! +${bonus.toFixed(2)} Tk`, 'success')
+        setClaiming(false)
+        return
+      }
+
       const response = await fetch(`${CLOUD_FUNCTIONS_URL}/claimBonus`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          streak: streak + 1,
-        }),
+        body: JSON.stringify({ userId: user.uid, streak: newStreak }),
       })
-
       const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Failed to claim bonus')
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to claim bonus')
-      }
-
-      const newStreak = streak + 1
-      const today = new Date().toDateString()
-      localStorage.setItem(`bonusStreak_${user.uid}`, `${today}|${newStreak}`)
+      const bonusAmount = result.reward || BONUS_AMOUNT
+      localStorage.setItem(`bonusStreak_${user?.uid}`, `${new Date().toDateString()}|${newStreak}`)
       setStreak(newStreak)
-
-      const bonusAmount = STREAK_BONUSES[newStreak] || BONUS_AMOUNT
-
-      await refreshUserData()
       showToast(`Daily bonus claimed! +${bonusAmount.toFixed(2)} Tk`, 'success')
     } catch (e) {
       showToast(e.message || 'Failed to claim bonus', 'error')
@@ -104,9 +99,7 @@ export default function DailyBonus() {
       </div>
 
       <div className="glass-card rounded-2xl p-8 gold-border text-center">
-        <div className="text-7xl mb-4">
-          {canClaim() ? '🎁' : '⏰'}
-        </div>
+        <div className="text-7xl mb-4">{canClaim() ? '🎁' : '⏰'}</div>
         <p className="text-4xl font-bold gold-gradient-text mb-2">
           +{(STREAK_BONUSES[streak + 1] || BONUS_AMOUNT).toFixed(2)} Tk
         </p>
@@ -118,29 +111,19 @@ export default function DailyBonus() {
           <span className="text-gray-400 text-sm">Current Streak</span>
           <span className="text-gold-400 font-bold text-lg">{streak} days</span>
         </div>
-
         <div className="flex justify-between items-center mb-4">
           <span className="text-gray-400 text-sm">Time Remaining</span>
           <span className={canClaim() ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold'}>
             {canClaim() ? 'Available' : timeLeft}
           </span>
         </div>
-
         <div className="flex gap-1 mb-4">
           {[...Array(7)].map((_, i) => (
-            <div
-              key={i}
-              className={`flex-1 h-2 rounded-full ${
-                i < streak ? 'gold-gradient' : 'bg-dark-700'
-              }`}
-            />
+            <div key={i} className={`flex-1 h-2 rounded-full ${i < streak ? 'gold-gradient' : 'bg-dark-700'}`} />
           ))}
         </div>
-
         <p className="text-center text-xs text-gray-500">
-          {streak >= 7
-            ? `🎉 ${streak} day streak! Keep going!`
-            : `${7 - streak} more days for 7-day streak bonus!`}
+          {streak >= 7 ? `🎉 ${streak} day streak! Keep going!` : `${7 - streak} more days for 7-day streak bonus!`}
         </p>
       </div>
 
@@ -167,13 +150,7 @@ export default function DailyBonus() {
       </div>
 
       {canClaim() ? (
-        <Button
-          variant="gold"
-          size="lg"
-          onClick={handleClaim}
-          loading={claiming}
-          disabled={claiming}
-        >
+        <Button variant="gold" size="lg" onClick={handleClaim} loading={claiming} disabled={claiming}>
           🎁 Claim Daily Bonus
         </Button>
       ) : (
