@@ -1,13 +1,13 @@
 const ADSGRAM_BLOCK_ID = '30739'
-
-function isAdsgramReady() {
-  return typeof window !== 'undefined' && typeof window.Adsgram !== 'undefined'
-}
+let controller = null
 
 function initController() {
-  if (!isAdsgramReady()) return null
+  if (controller) return controller
+  if (typeof window === 'undefined' || typeof window.Adsgram === 'undefined') return null
+
   try {
-    return window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID })
+    controller = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID })
+    return controller
   } catch (e) {
     console.warn('AdsGram init error:', e)
     return null
@@ -16,19 +16,35 @@ function initController() {
 
 export function showRewardedAd() {
   return new Promise((resolve) => {
-    const controller = initController()
-    if (!controller) {
+    const adCtrl = initController()
+    if (!adCtrl) {
       resolve({ done: true, demo: true })
       return
     }
 
-    controller
+    let resolved = false
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        resolve({ done: true, demo: true, timeout: true })
+      }
+    }, 30000)
+
+    adCtrl
       .show()
       .then((result) => {
-        resolve({ done: true, ...result })
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          resolve({ done: true, ...result })
+        }
       })
       .catch((result) => {
-        resolve({ done: false, ...result })
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          resolve({ done: false, ...result })
+        }
       })
   })
 }
