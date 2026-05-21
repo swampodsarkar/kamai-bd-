@@ -1,0 +1,115 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth.uid !== null",
+      ".write": "false",
+      "$uid": {
+        ".read": "auth.uid === $uid",
+        ".write": "auth.uid === $uid && newData.hasChildren(['balance', 'adsWatched', 'referrals', 'lastBonusClaim', 'createdAt']) && newData.child('balance').val() <= data.child('balance').val() + 0.01",
+        "balance": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "adsWatched": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "referrals": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "lastBonusClaim": {
+          ".validate": "newData.isNumber()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "isBanned": {
+          ".validate": "newData.isBoolean()"
+        },
+        "isAdmin": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "withdrawals": {
+      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      ".write": "auth.uid !== null",
+      "$withdrawId": {
+        ".validate": "newData.hasChildren(['userId', 'amount', 'method', 'status', 'createdAt'])",
+        "userId": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "amount": {
+          ".validate": "newData.isNumber() && newData.val() > 0"
+        },
+        "method": {
+          ".validate": "newData.isString() && (newData.val() === 'bKash' || newData.val() === 'Nagad' || newData.val() === 'Rocket')"
+        },
+        "accountNumber": {
+          ".validate": "newData.isString() && newData.val().length >= 5"
+        },
+        "status": {
+          ".validate": "newData.isString() && (newData.val() === 'pending' || newData.val() === 'approved' || newData.val() === 'rejected')"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "processedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "processedBy": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "ad_logs": {
+      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      ".write": "auth.uid !== null",
+      "$logId": {
+        ".validate": "newData.hasChildren(['userId', 'timestamp', 'reward'])",
+        "userId": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
+        },
+        "reward": {
+          ".validate": "newData.isNumber() && newData.val() > 0"
+        },
+        "adType": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "referrals": {
+      ".read": "auth.uid !== null",
+      ".write": "auth.uid !== null",
+      "$uid": {
+        "referredBy": {
+          ".read": "auth.uid === $uid",
+          ".write": "auth.uid === $uid",
+          ".validate": "newData.isString()"
+        },
+        "referralsList": {
+          ".read": "auth.uid === $uid",
+          ".write": "auth.uid === $uid"
+        }
+      }
+    },
+    "ad_queue": {
+      ".read": false,
+      ".write": false
+    },
+    "analytics": {
+      ".read": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true",
+      ".write": "auth.uid !== null && root.child('users').child(auth.uid).child('isAdmin').val() === true"
+    }
+  }
+}

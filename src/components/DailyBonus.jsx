@@ -1,0 +1,190 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useUser } from '../context/UserContext'
+import { CLOUD_FUNCTIONS_URL } from '../lib/firebase'
+import Button from './ui/Button'
+import { showToast } from './ui/Toast'
+
+const BONUS_AMOUNT = 0.25
+const STREAK_BONUSES = {
+  7: 2.00,
+  14: 5.00,
+  30: 15.00,
+}
+
+export default function DailyBonus() {
+  const { user, userData, refreshUserData } = useUser()
+  const navigate = useNavigate()
+  const [claiming, setClaiming] = useState(false)
+  const [streak, setStreak] = useState(0)
+  const [timeLeft, setTimeLeft] = useState('')
+
+  const canClaim = useCallback(() => {
+    if (!userData?.lastBonusClaim) return true
+    const now = Date.now()
+    return now - userData.lastBonusClaim >= 24 * 60 * 60 * 1000
+  }, [userData])
+
+  useEffect(() => {
+    if (!userData?.lastBonusClaim) {
+      setTimeLeft('Claim now!')
+      return
+    }
+
+    const updateTimeLeft = () => {
+      const now = Date.now()
+      const diff = 24 * 60 * 60 * 1000 - (now - userData.lastBonusClaim)
+      if (diff <= 0) {
+        setTimeLeft('Claim now!')
+        return
+      }
+      const h = Math.floor(diff / (60 * 60 * 1000))
+      const m = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000))
+      const s = Math.floor((diff % (60 * 1000)) / 1000)
+      setTimeLeft(`${h}h ${m}m ${s}s`)
+    }
+
+    updateTimeLeft()
+    const interval = setInterval(updateTimeLeft, 1000)
+    return () => clearInterval(interval)
+  }, [userData?.lastBonusClaim])
+
+  useEffect(() => {
+    const savedStreak = localStorage.getItem(`bonusStreak_${user?.uid}`)
+    if (savedStreak) {
+      const [date, count] = savedStreak.split('|')
+      const today = new Date().toDateString()
+      if (date === today || new Date(date).getTime() > Date.now() - 48 * 60 * 60 * 1000) {
+        setStreak(parseInt(count))
+      }
+    }
+  }, [user?.uid])
+
+  const handleClaim = async () => {
+    if (!canClaim() || claiming || !user?.uid) return
+
+    setClaiming(true)
+    try {
+      const response = await fetch(`${CLOUD_FUNCTIONS_URL}/claimBonus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          streak: streak + 1,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to claim bonus')
+      }
+
+      const newStreak = streak + 1
+      const today = new Date().toDateString()
+      localStorage.setItem(`bonusStreak_${user.uid}`, `${today}|${newStreak}`)
+      setStreak(newStreak)
+
+      const bonusAmount = STREAK_BONUSES[newStreak] || BONUS_AMOUNT
+
+      await refreshUserData()
+      showToast(`Daily bonus claimed! +${bonusAmount.toFixed(2)} Tk`, 'success')
+    } catch (e) {
+      showToast(e.message || 'Failed to claim bonus', 'error')
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold gold-gradient-text">Daily Bonus</h1>
+        <p className="text-gray-400 text-sm mt-1">Claim your reward every day</p>
+      </div>
+
+      <div className="glass-card rounded-2xl p-8 gold-border text-center">
+        <div className="text-7xl mb-4">
+          {canClaim() ? '🎁' : '⏰'}
+        </div>
+        <p className="text-4xl font-bold gold-gradient-text mb-2">
+          +{(STREAK_BONUSES[streak + 1] || BONUS_AMOUNT).toFixed(2)} Tk
+        </p>
+        <p className="text-gray-400 text-sm">Daily Bonus</p>
+      </div>
+
+      <div className="glass-card rounded-2xl p-6">
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-gray-400 text-sm">Current Streak</span>
+          <span className="text-gold-400 font-bold text-lg">{streak} days</span>
+        </div>
+
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-gray-400 text-sm">Time Remaining</span>
+          <span className={canClaim() ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold'}>
+            {canClaim() ? 'Available' : timeLeft}
+          </span>
+        </div>
+
+        <div className="flex gap-1 mb-4">
+          {[...Array(7)].map((_, i) => (
+            <div
+              key={i}
+              className={`flex-1 h-2 rounded-full ${
+                i < streak ? 'gold-gradient' : 'bg-dark-700'
+              }`}
+            />
+          ))}
+        </div>
+
+        <p className="text-center text-xs text-gray-500">
+          {streak >= 7
+            ? `🎉 ${streak} day streak! Keep going!`
+            : `${7 - streak} more days for 7-day streak bonus!`}
+        </p>
+      </div>
+
+      <div className="glass-card rounded-2xl p-6">
+        <h3 className="text-white font-semibold mb-3">Streak Rewards</h3>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center py-2 border-b border-white/5">
+            <span className="text-gray-400 text-sm">Daily Bonus</span>
+            <span className="text-gold-400 font-medium">+{BONUS_AMOUNT.toFixed(2)} Tk</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-white/5">
+            <span className="text-gray-400 text-sm">7-Day Streak</span>
+            <span className="text-emerald-400 font-medium">+{STREAK_BONUSES[7].toFixed(2)} Tk</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-white/5">
+            <span className="text-gray-400 text-sm">14-Day Streak</span>
+            <span className="text-emerald-400 font-medium">+{STREAK_BONUSES[14].toFixed(2)} Tk</span>
+          </div>
+          <div className="flex justify-between items-center py-2">
+            <span className="text-gray-400 text-sm">30-Day Streak</span>
+            <span className="text-gold-400 font-bold">+{STREAK_BONUSES[30].toFixed(2)} Tk</span>
+          </div>
+        </div>
+      </div>
+
+      {canClaim() ? (
+        <Button
+          variant="gold"
+          size="lg"
+          onClick={handleClaim}
+          loading={claiming}
+          disabled={claiming}
+        >
+          🎁 Claim Daily Bonus
+        </Button>
+      ) : (
+        <Button variant="secondary" disabled>
+          ⏰ Available in {timeLeft}
+        </Button>
+      )}
+
+      <Button variant="ghost" onClick={() => navigate('/')}>
+        Back to Dashboard
+      </Button>
+    </div>
+  )
+}
