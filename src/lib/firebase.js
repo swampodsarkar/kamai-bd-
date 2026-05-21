@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getDatabase, ref, set, get, child, update, onValue, off, push, increment } from 'firebase/database'
-import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCfwz5irJzMy1UGzVhqb4rmqL4z-jeeJzA',
@@ -29,6 +29,7 @@ export {
   off,
   push,
   increment,
-  signInAnonymously,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
 }
 export default app

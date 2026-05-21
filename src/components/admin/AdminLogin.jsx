@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { auth, db, ref, get, signInAnonymously } from '../../lib/firebase'
+import { auth, db, ref, get, set, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../../lib/firebase'
 import Button from '../ui/Button'
 import { showToast } from '../ui/Toast'
 
@@ -17,7 +17,16 @@ export default function AdminLogin() {
 
     setLoading(true)
     try {
-      const cred = await signInAnonymously(auth)
+      const email = 'admin@kamai.app'
+      const password = 'kamai-admin-2026-secure'
+
+      let cred
+      try {
+        cred = await signInWithEmailAndPassword(auth, email, password)
+      } catch (e) {
+        cred = await createUserWithEmailAndPassword(auth, email, password)
+      }
+
       const adminRef = ref(db, `users/${cred.user.uid}`)
       const snapshot = await get(adminRef)
 

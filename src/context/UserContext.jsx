@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { auth, db, ref, onValue, off, set, get, update } from '../lib/firebase'
-import { signInAnonymously } from 'firebase/auth'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
 import useTelegram from '../hooks/useTelegram'
 
 const UserContext = createContext(null)
@@ -12,6 +12,22 @@ export function UserProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const listenerRef = useRef(null)
+
+  const telegramAuth = useCallback(async (telegramId) => {
+    const email = `tg_${telegramId}@kamai.app`
+    const password = `kamai_${telegramId}_2026`
+
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password)
+      return cred
+    } catch (e) {
+      if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+        const cred = await createUserWithEmailAndPassword(auth, email, password)
+        return cred
+      }
+      throw e
+    }
+  }, [])
 
   const createOrUpdateUser = useCallback(async (firebaseUser) => {
     if (!firebaseUser?.uid) return
@@ -85,7 +101,8 @@ export function UserProvider({ children }) {
     const doAuth = async () => {
       try {
         if (tgUser?.id) {
-          const cred = await signInAnonymously(auth)
+          console.log('Telegram login:', tgUser.id, tgUser.firstName)
+          const cred = await telegramAuth(tgUser.id)
           setUser(cred.user)
           await createOrUpdateUser(cred.user)
           startRealtimeListener(cred.user.uid)
@@ -105,7 +122,7 @@ export function UserProvider({ children }) {
     return () => {
       if (listenerRef.current) off(ref(db, `users/${listenerRef.current}`))
     }
-  }, [tgReady, tgUser, createOrUpdateUser, startRealtimeListener])
+  }, [tgReady, tgUser, telegramAuth, createOrUpdateUser, startRealtimeListener])
 
   const updateUserData = useCallback((updates) => {
     if (!user?.uid) return
