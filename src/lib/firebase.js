@@ -3,13 +3,14 @@ import { getDatabase, ref, set, get, child, update, onValue, off, push, serverTi
 import { getAuth, signInWithCustomToken, signOut } from 'firebase/auth'
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: 'AIzaSyCfwz5irJzMy1UGzVhqb4rmqL4z-jeeJzA',
+  authDomain: 'minerx-market.firebaseapp.com',
+  databaseURL: 'https://minerx-market-default-rtdb.firebaseio.com',
+  projectId: 'minerx-market',
+  storageBucket: 'minerx-market.firebasestorage.app',
+  messagingSenderId: '1080849676320',
+  appId: '1:1080849676320:web:1faa3502ad7899c6192445',
+  measurementId: 'G-E0SGPXWBQ4',
 }
 
 const app = initializeApp(firebaseConfig)
