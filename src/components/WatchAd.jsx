@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
-import { db, ref, set, push, get } from '../lib/firebase'
+import { db, ref, set, push } from '../lib/firebase'
 import { showRewardedAd } from '../lib/adsgram'
 import Button from './ui/Button'
 import { showToast } from './ui/Toast'
@@ -17,6 +17,10 @@ export default function WatchAd() {
   const [adsWatchedToday, setAdsWatchedToday] = useState(0)
   const [lastReward, setLastReward] = useState(null)
   const cooldownRef = useRef(null)
+
+  useEffect(() => {
+    console.log('WatchAd state:', { user: user?.uid, userData, cooldown, isWatching })
+  }, [user?.uid, userData, cooldown, isWatching])
 
   useEffect(() => {
     const saved = localStorage.getItem(`adCooldown_${user?.uid}`)
@@ -53,7 +57,24 @@ export default function WatchAd() {
   }, [cooldown, user?.uid])
 
   const handleWatchAd = useCallback(async () => {
-    if (isWatching || cooldown > 0 || !user?.uid || !userData) return
+    console.log('handleWatchAd called', { user: user?.uid, userData, cooldown, isWatching })
+
+    if (!user?.uid) {
+      showToast('Not authenticated. Please reopen from Telegram.', 'error')
+      return
+    }
+    if (!userData) {
+      showToast('User data not loaded. Please wait...', 'warning')
+      return
+    }
+    if (isWatching) {
+      showToast('Ad is loading...', 'info')
+      return
+    }
+    if (cooldown > 0) {
+      showToast('Wait before next ad!', 'warning')
+      return
+    }
 
     const now = Date.now()
     const lastAdTime = userData.lastAdTime || 0
@@ -71,7 +92,9 @@ export default function WatchAd() {
     setLastReward(null)
 
     try {
+      console.log('Calling showRewardedAd...')
       const result = await showRewardedAd()
+      console.log('Ad result:', result)
 
       if (!result.done) {
         if (!result.demo) showToast('Watch the full ad to earn reward', 'warning')
@@ -108,6 +131,7 @@ export default function WatchAd() {
       setLastReward(REWARD)
       showToast(`Earned ${REWARD.toFixed(2)} Tk!`, 'success')
     } catch (e) {
+      console.error('WatchAd error:', e)
       showToast(e.message || 'Failed to watch ad.', 'error')
     } finally {
       setIsWatching(false)
